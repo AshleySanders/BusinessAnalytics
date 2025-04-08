@@ -5,6 +5,8 @@ library(janitor)
 library(car)
 library(ggplot2)
 library(corrplot)
+library(stringr)
+library(stringdist)
 here()
 
 vx_deals <- read_csv(here("100-Projects", "04-VxGroup", "data_clean","all_deals.csv"))
@@ -104,3 +106,65 @@ contacts <- contacts %>%
     simplified_role = simplify_role(job_title_original),
     job_domain = determine_domain(job_title_original)
   )
+
+##################################
+## Prepare the company data set ##
+##################################
+
+vx_zoominfo <- read_csv(here("100-Projects", "04-VxGroup", "data_all", "vx_zoom_co_data.csv"))
+
+vx_crm_co <- read_csv(here("100-Projects", "04-VxGroup", "data_all", "vx_company_list.csv"))
+
+vx_zoominfo <- vx_zoominfo %>% clean_names()
+vx_crm_co <- vx_crm_co %>% clean_names()
+
+vx_zoominfo <- vx_zoominfo %>% distinct()
+vx_crm_co <- vx_crm_co %>% distinct()
+
+# Trim whitespace from all character columns
+vx_zoominfo <- vx_zoominfo %>% mutate(across(where(is.character), str_trim))
+vx_crm_co <- vx_crm_co %>% mutate(across(where(is.character), str_trim))
+
+colnames(vx_zoominfo)
+colnames(vx_crm_co)
+
+# Company names were too messy to fully reconcile.
+# Check company website urls in ZoomInfo and HubSpot (CRM) lists to see if they can be used as a primary key for the join
+
+normalize_url <- function(url) {
+  url <- tolower(url)
+  url <- str_trim(url)
+  url <- str_replace_all(url, "^https?://", "")  # remove http/https
+  url <- str_replace(url, "^www\\.", "")         # remove www.
+  url <- str_replace(url, "/$", "")              # remove trailing slash
+  return(url)
+}
+
+# vx_zoominfo
+# vx_crm_co
+
+# Normalize website fields
+crm_df <- vx_crm_co %>%
+  mutate(website_norm = normalize_url(website_url))
+
+zoominfo_df <- vx_zoominfo %>%
+  mutate(website_norm = normalize_url(website))
+
+# Join on normalized website
+joined_df <- left_join(zoominfo_df, crm_df, by = "website_norm")
+
+write_csv(joined_df, here("100-Projects", "04-VxGroup", "data_all", "joined_company_data.csv"))
+
+# Check to see for how many companies we were able to match website urls and link the primary_company_id.
+sum(is.na(joined_df$primary_company_id))
+sum(!is.na(joined_df$primary_company_id))
+sum(is.na(vx_crm_co$primary_company_id))
+sum(!is.na(vx_crm_co$primary_company_id))
+
+# I have primary_company_ids for 89% of the companies whose information exists in both the ZoomInfo list and the CRM.
+
+
+
+
+
+
