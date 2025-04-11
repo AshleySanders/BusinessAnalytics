@@ -41,7 +41,7 @@ write_csv(vx_deals, here("100-Projects", "04-VxGroup", "data_clean", "all_deals_
 ## Prepare Contacts dataset ##
 ##############################
 
-contacts <- read_csv(here("100-Projects", "04-VxGroup", "all-contacts-20250405-reconciled.csv"))
+contacts <- read_csv(here("100-Projects", "04-VxGroup", "data_clean", "all_contacts.csv"))
 
 # Clean column names using snake_case
 contacts <- contacts %>% clean_names()
@@ -103,7 +103,7 @@ determine_domain <- function(title) {
 # Apply the functions
 contacts <- contacts %>%
   mutate(
-    simplified_role = simplify_role(job_title_original),
+    role = simplify_role(job_title_original),
     job_domain = determine_domain(job_title_original)
   )
 
@@ -163,8 +163,56 @@ sum(!is.na(vx_crm_co$primary_company_id))
 
 # I have primary_company_ids for 89% of the companies whose information exists in both the ZoomInfo list and the CRM.
 
+# After the join, I removed unnecessary columns, reconciled country names, and added a column for continents in Excel and Open Refine.
+
+# Uploading the refined dataset:
+companies <- read_csv(here("100-Projects", "04-VxGroup", "data_clean", "all_companies_simp.csv"))
+
+# Clean and prepare data set to join with vx_deals
+companies <- companies %>% clean_names()
+
+table(table(companies$primary_company_id))  # Only shows counts
+
+# Check how many rows per company ID
+dupes <- companies %>%
+  group_by(primary_company_id) %>%
+  filter(n() > 1)
+
+nrow(dupes)  # This should be 0 ideally
+
+companies_unique <- companies %>%
+  distinct(primary_company_id, .keep_all = TRUE)
+
+# Create a joined data between companies_unique and vx_deals
+joined_deals <- left_join(vx_deals, companies_unique, by = "primary_company_id", relationship = "many-to-one")
 
 
+# Prepare contacts dataset for join with the joined_deals dataset based on contact_id.
+
+table(table(contacts$contact_id))  # Only shows counts
+
+# Check how many rows per company ID
+dupes <- contacts %>%
+  group_by(contact_id) %>%
+  filter(n() > 1)
+
+nrow(dupes)  # This should be 0 ideally
+
+contacts_unique <- contacts %>%
+  distinct(contact_id, .keep_all = TRUE)
+
+dupes <- contacts_unique %>%
+group_by(contact_id) %>%
+filter(n() > 1)
+nrow(dupes)  # This should be 0 ideally
 
 
+vx_fulljoin <- left_join(joined_deals, contacts_unique, by="contact_id", relationship = "many-to-one")
 
+# Check accuracy of the final join:
+
+vx_fulljoin <- left_join(joined_deals, contacts_unique, by="contact_id", relationship = "many-to-one")
+nrow(vx_fulljoin) == nrow(vx_deals)  # Should be TRUE
+table(vx_fulljoin$closed_won_count)  # Should be 748 / 336
+
+vx_fulljoin <- vx_fulljoin %>% clean_names()
